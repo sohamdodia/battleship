@@ -11,6 +11,9 @@ const Board = mongoose.model('board');
 const Ship = mongoose.model('ship');
 const Attack = mongoose.model('attack');
 
+/**
+ * Valid Ships with ship length and max allowed ships
+ */
 const validShips = {
   battleship: {
     length: 4,
@@ -31,16 +34,19 @@ const validShips = {
 }
 
 const checkTrue = value => value === true;
+
 const checkInt = value => Number.isInteger(value);
 
 /**
  * Function will check that the location is multidemension array wtih 2 values
- * also it will check that the length should be equal to the ship allowed length
+ * it will check that the length should be equal to the ship allowed length
+ * it will also check for data consistency 
  */
 const checkValidLocation = (model, location) => {
   //Check if length is valid or not
   const validLength = location.length === validShips[`${model}`].length ? true : false;
   if (!validLength) return false;
+
   //If filteredLocation length is not match with location, then it means data is corrupted
   let filteredLocation = location.filter(l => l.length === 2);
   if (filteredLocation.length !== location.length) return false;
@@ -49,11 +55,13 @@ const checkValidLocation = (model, location) => {
   filteredLocation = _.uniqBy(filteredLocation, (item) => JSON.stringify(item));
   if (filteredLocation.length !== location.length) return false;
 
+  //Check all the values are int
   filteredLocation.forEach(l => {
     if (!checkInt(l[0]) || !checkInt(l[1])) {
       return false;
     }
   })
+
   //Check if location is in between 10 * 10 size
   for (let i = 0; i < filteredLocation.length; i++) {
     if (filteredLocation[i][0] < 0 || filteredLocation[i][1] < 0 || filteredLocation[i][0] > 10 || filteredLocation[i][1] > 10) {
@@ -84,20 +92,23 @@ const checkValidLocation = (model, location) => {
   let verticalLocation = JSON.parse(JSON.stringify(filteredLocation));
   verticalLocation.sort((a, b) => b[1] - a[1]);
   verticalLocation.sort((a, b) => b[0] - a[0]);
-  //Check if it is vertical
+
   for (let i = 0; i < verticalLocation.length - 1; i++) {
     if (!(verticalLocation[i][1] == verticalLocation[i + 1][1]) || !(Math.abs(verticalLocation[i][0] - verticalLocation[i + 1][0]) === 1)) {
       validVerticalLocation = false;
       break;
     }
   }
-
+  //If not valid vertical or horizontal then return false
   if (!validVerticalLocation && !validHorizontalLocation) {
     return false;
   }
   return true;
 }
 
+/**
+ * Check if the location is already taken or not
+ */
 const checkLocationTaken = (ships, location) => {
 
   let locationTaken = false;
@@ -119,7 +130,9 @@ const checkLocationTaken = (ships, location) => {
   }
 };
 
-
+/**
+ * Create a new board
+ */
 exports.createBoard = async (req, res) => {
   try {
     const board = new Board(req.body);
@@ -132,6 +145,9 @@ exports.createBoard = async (req, res) => {
   }
 }
 
+/**
+ * Get all the boards
+ */
 exports.getAllBoards = async (req, res) => {
   try {
     const fetchedBoards = await Board.find({});
@@ -141,6 +157,9 @@ exports.getAllBoards = async (req, res) => {
   }
 }
 
+/**
+ * Get a single board with all the ships
+ */
 exports.getSignleBoard = async (req, res) => {
   try {
     const { id } = req.params;
@@ -159,6 +178,10 @@ exports.getSignleBoard = async (req, res) => {
     return res.status(500).send(helper.getCustomErrorMessage());
   }
 }
+
+/**
+ * Place a ship on board
+ */
 
 exports.placeShip = async (req, res) => {
   try {
@@ -214,11 +237,13 @@ exports.placeShip = async (req, res) => {
     return res.status(200).send(helper.getCustomSuccessMessage(createdShip));
 
   } catch (error) {
-    console.log({ error });
     return res.status(500).send(helper.getCustomErrorMessage());
   }
 };
 
+/**
+ * Attack on a ship
+ */
 exports.attack = async (req, res) => {
   try {
     const { location } = req.body;
@@ -230,13 +255,15 @@ exports.attack = async (req, res) => {
         validationResult.error, validationResult.error.details[0].message,
       ));
     }
-
+    //If location is out of range or not int value
     if (location[0] < 0 || location[0] > 10 || location[1] < 0 || location[1] > 10 || !checkInt(location[0]) || !checkInt(location[1])) {
       return res.status(400).send(helper.getCustomErrorMessage(
         {}, message.notValidAttackLocation,
       ));
     }
+
     const fetchedBoard = await Board.findById(boardId);
+    //if state is not start then don't allow to attack
     if (fetchedBoard.state === 'end' || fetchedBoard.state === 'init') {
       return res.status(400).send(helper.getCustomErrorMessage(
         {}, message.gameStateError(fetchedBoard.state, 'attack'),
@@ -250,6 +277,8 @@ exports.attack = async (req, res) => {
     }
 
     const fetchedAttack = await Attack.findOne({ boardId, location });
+
+    //If attack already made on location
     if (fetchedAttack) {
       return res.status(400).send(helper.getCustomErrorMessage(
         {}, message.alreadyAttackedLocation,
@@ -295,7 +324,7 @@ exports.attack = async (req, res) => {
         ]);
         return res.status(200).send(helper.getCustomSuccessMessage({}, message.gameCompleted(totalHitMove, totalMissMove))); 
       }
-    } else {
+    } else { //Miss
       const attackData = {
         boardId,
         action: 'miss',
@@ -307,7 +336,6 @@ exports.attack = async (req, res) => {
       return res.status(200).send(helper.getCustomSuccessMessage({}, message.attackMiss));
     }
   } catch (error) {
-    console.log({ error });
     return res.status(500).send(helper.getCustomErrorMessage());
   }
 };
